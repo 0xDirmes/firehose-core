@@ -154,7 +154,16 @@ func urlToLoggerName(url string) string {
 func (r *Relayer) Run() {
 	go r.hub.Run()
 	zlog.Info("waiting for hub to be ready...")
-	<-r.hub.Ready
+	select {
+	case <-r.hub.Ready:
+	case <-r.hub.Terminating():
+		// The hub can shut down before it ever becomes ready (for example when
+		// live blocks cannot be linked against one-block files after a restart).
+		// Propagate that so the process exits instead of hanging with no
+		// blockstream server listening.
+		r.Shutdown(r.hub.Err())
+		return
+	}
 
 	// Seed head metrics from the bootstrapped hub head so we report it
 	// immediately, instead of only once a live block flows through the forkable.
